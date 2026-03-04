@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FTC Parts Inventory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #0a0b0d;
+    --surface: #111318;
+    --surface2: #181b22;
+    --border: #252932;
+    --orange: #ff6b2b;
+    --orange-dim: rgba(255,107,43,0.12);
+    --orange-glow: rgba(255,107,43,0.25);
+    --yellow: #f5c518;
+    --green: #2dce7a;
+    --red: #ff4545;
+    --text: #e8eaf0;
+    --muted: #5a6070;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,107,43,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,107,43,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ─── SETUP SCREEN ─── */
+  #setup-screen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .setup-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--orange);
+    border-radius: 4px;
+    padding: 40px;
+    max-width: 580px;
+    width: 100%;
+  }
+
+  .setup-card h1 {
+    font-family: var(--sans);
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+  }
+
+  .setup-card h1 span { color: var(--orange); }
+
+  .setup-subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    font-family: var(--mono);
+    margin-bottom: 28px;
+  }
+
+  .step-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--orange);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .sql-block {
+    background: #0d0e11;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #a0c4ff;
+    line-height: 1.6;
+    margin-bottom: 8px;
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  .copy-sql-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-bottom: 24px;
+    transition: all 0.15s;
+  }
+  .copy-sql-btn:hover { border-color: var(--orange); color: var(--orange); }
+
+  .setup-fields { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
+
+  .field-group label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .field-group input {
+    width: 100%;
+    background: #0d0e11;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field-group input:focus { border-color: var(--orange); }
+
+  .connect-btn {
+    width: 100%;
+    background: var(--orange);
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 700;
+    padding: 12px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: opacity 0.15s;
+  }
+  .connect-btn:hover { opacity: 0.88; }
+
+  .setup-error {
+    color: var(--red);
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 10px;
+    display: none;
+  }
+
+  /* ─── MAIN APP ─── */
+  #app { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .header-left h1 {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -1px;
+  }
+  .header-left h1 span { color: var(--orange); }
+
+  .header-left .team-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .header-right { display: flex; align-items: center; gap: 10px; }
+
+  .live-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse-green 2s infinite;
+  }
+  @keyframes pulse-green { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .live-text {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--green);
+  }
+
+  .add-btn {
+    background: var(--orange);
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 13px;
+    padding: 9px 18px;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: opacity 0.15s;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .add-btn:hover { opacity: 0.85; }
+
+  /* Stats bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+  }
+
+  .stat-card .stat-val {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-card .stat-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  .stat-card.alert { border-color: rgba(255,69,69,0.4); background: rgba(255,69,69,0.05); }
+  .stat-card.alert .stat-val { color: var(--red); }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .search-wrap {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+  }
+
+  .search-wrap input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 9px 12px 9px 36px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-wrap input:focus { border-color: var(--orange); }
+  .search-wrap input::placeholder { color: var(--muted); }
+
+  .search-icon {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .filter-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 9px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .filter-btn:hover, .filter-btn.active {
+    border-color: var(--orange);
+    color: var(--orange);
+    background: var(--orange-dim);
+  }
+
+  /* Category tabs */
+  .cat-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+
+  .cat-tab {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.5px;
+  }
+  .cat-tab:hover { border-color: var(--muted); color: var(--text); }
+  .cat-tab.active { background: var(--orange-dim); border-color: var(--orange); color: var(--orange); }
+
+  /* Table */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+
+  thead th {
+    background: var(--surface2);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  thead th:first-child { padding-left: 20px; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+  tbody td {
+    padding: 13px 16px;
+    font-size: 14px;
+    vertical-align: middle;
+  }
+  tbody td:first-child { padding-left: 20px; }
+
+  .part-name {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .part-notes {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .cat-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  .cat-hardware { background: rgba(100,160,255,0.12); color: #64a0ff; border: 1px solid rgba(100,160,255,0.25); }
+  .cat-motors   { background: rgba(255,200,50,0.12);  color: #ffc832; border: 1px solid rgba(255,200,50,0.25); }
+  .cat-sensors  { background: rgba(160,100,255,0.12); color: #a064ff; border: 1px solid rgba(160,100,255,0.25); }
+  .cat-electronics { background: rgba(45,206,122,0.12); color: #2dce7a; border: 1px solid rgba(45,206,122,0.25); }
+  .cat-other    { background: rgba(150,150,150,0.12); color: #909090; border: 1px solid rgba(150,150,150,0.25); }
+
+  /* Quantity cell */
+  .qty-cell { display: flex; align-items: center; gap: 10px; }
+
+  .qty-val {
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 700;
+    min-width: 32px;
+  }
+  .qty-val.ok { color: var(--green); }
+  .qty-val.low { color: var(--yellow); }
+  .qty-val.critical { color: var(--red); }
+
+  .qty-btns { display: flex; gap: 4px; }
+
+  .qty-btn {
+    width: 24px; height: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.1s;
+    font-family: var(--mono);
+  }
+  .qty-btn:hover { background: var(--orange-dim); border-color: var(--orange); color: var(--orange); }
+
+  .low-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: rgba(245,197,24,0.15);
+    color: var(--yellow);
+    border: 1px solid rgba(245,197,24,0.3);
+    letter-spacing: 1px;
+    animation: blink-badge 2s infinite;
+  }
+  @keyframes blink-badge { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  .critical-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: rgba(255,69,69,0.15);
+    color: var(--red);
+    border: 1px solid rgba(255,69,69,0.3);
+    letter-spacing: 1px;
+    animation: blink-badge 1s infinite;
+  }
+
+  .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+  .icon-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 30px; height: 30px;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    transition: all 0.12s;
+  }
+  .icon-btn.edit:hover { border-color: var(--orange); color: var(--orange); background: var(--orange-dim); }
+  .icon-btn.del:hover  { border-color: var(--red);    color: var(--red);    background: rgba(255,69,69,0.1); }
+
+  /* Empty state */
+  .empty-state {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+  .empty-state p { font-family: var(--mono); font-size: 13px; }
+
+  /* ─── MODAL ─── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--orange);
+    border-radius: 4px;
+    padding: 32px;
+    max-width: 460px;
+    width: 100%;
+    transform: translateY(16px);
+    transition: transform 0.2s;
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+
+  .modal h2 {
+    font-size: 18px;
+    font-weight: 800;
+    margin-bottom: 24px;
+    letter-spacing: -0.3px;
+  }
+
+  .form-grid { display: flex; flex-direction: column; gap: 16px; }
+
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .form-field label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .form-field input,
+  .form-field select,
+  .form-field textarea {
+    width: 100%;
+    background: #0d0e11;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .form-field input:focus,
+  .form-field select:focus,
+  .form-field textarea:focus { border-color: var(--orange); }
+  .form-field select { cursor: pointer; }
+  .form-field textarea { resize: vertical; min-height: 60px; }
+
+  .modal-footer {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+    justify-content: flex-end;
+  }
+
+  .btn-cancel {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 13px;
+    padding: 9px 18px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-cancel:hover { border-color: var(--muted); color: var(--text); }
+
+  .btn-save {
+    background: var(--orange);
+    color: #fff;
+    border: none;
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 13px;
+    padding: 9px 22px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn-save:hover { opacity: 0.85; }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--green);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 12px 18px;
+    border-radius: 3px;
+    z-index: 500;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: all 0.2s;
+    max-width: 280px;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.error { border-left-color: var(--red); }
+
+  /* Low stock section */
+  .low-stock-banner {
+    background: rgba(255,69,69,0.06);
+    border: 1px solid rgba(255,69,69,0.2);
+    border-radius: 4px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .low-stock-banner .banner-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--red);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .low-stock-items {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    flex: 1;
+  }
+  .low-stock-items span { color: var(--yellow); }
+
+  @media (max-width: 640px) {
+    .form-row { grid-template-columns: 1fr; }
+    thead th:nth-child(2),
+    tbody td:nth-child(2) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── SETUP SCREEN ─── -->
+<div id="setup-screen">
+  <div class="setup-card">
+    <h1>⚙️ FTC <span>Inventory</span> Setup</h1>
+    <p class="setup-subtitle">// one-time configuration — runs in seconds</p>
+
+    <div class="step-label">Step 1 — Run this SQL in Supabase → SQL Editor</div>
+    <div class="sql-block" id="sql-text">create table parts (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  category text not null,
+  quantity int not null default 0,
+  low_threshold int not null default 2,
+  location text,
+  notes text,
+  created_at timestamptz default now()
+);
+alter table parts enable row level security;
+create policy "public read"  on parts for select using (true);
+create policy "public write" on parts for all    using (true);</div>
+    <button class="copy-sql-btn" onclick="copySQL()">📋 Copy SQL</button>
+
+    <div class="step-label">Step 2 — Paste your Supabase credentials</div>
+    <div class="setup-fields">
+      <div class="field-group">
+        <label>Project URL</label>
+        <input type="text" id="sb-url" placeholder="https://xxxxxxxxxxxx.supabase.co">
+      </div>
+      <div class="field-group">
+        <label>Anon / Public Key</label>
+        <input type="text" id="sb-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+      </div>
+    </div>
+    <button class="connect-btn" onclick="connect()">Connect & Launch →</button>
+    <div class="setup-error" id="setup-error"></div>
+  </div>
+</div>
+
+<!-- ─── MAIN APP ─── -->
+<div id="app" style="display:none;">
+
+  <div class="header">
+    <div class="header-left">
+      <h1>FTC <span>Parts</span> Inventory</h1>
+      <div class="team-tag">// shared inventory · updates live for everyone</div>
+    </div>
+    <div class="header-right">
+      <div class="live-dot"></div>
+      <div class="live-text">LIVE</div>
+      <button class="add-btn" onclick="openModal()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        Add Part
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar" id="stats-bar">
+    <div class="stat-card">
+      <div class="stat-val" id="stat-total">—</div>
+      <div class="stat-label">Total Parts</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" id="stat-qty" style="color:var(--orange)">—</div>
+      <div class="stat-label">Total Items</div>
+    </div>
+    <div class="stat-card alert" id="stat-low-card">
+      <div class="stat-val" id="stat-low">—</div>
+      <div class="stat-label">Low / Out of Stock</div>
+    </div>
+  </div>
+
+  <!-- Low stock banner -->
+  <div class="low-stock-banner" id="low-banner" style="display:none">
+    <div class="banner-label">⚠ Low Stock Alert</div>
+    <div class="low-stock-items" id="low-list"></div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" id="search-input" placeholder="Search parts…" oninput="renderTable()">
+    </div>
+    <button class="filter-btn active" id="filter-all" onclick="setFilter('all', this)">ALL</button>
+    <button class="filter-btn" id="filter-low" onclick="setFilter('low', this)">⚠ LOW</button>
+  </div>
+
+  <!-- Category tabs -->
+  <div class="cat-tabs">
+    <button class="cat-tab active" onclick="setCat('all', this)">All Categories</button>
+    <button class="cat-tab" onclick="setCat('Hardware', this)">Hardware</button>
+    <button class="cat-tab" onclick="setCat('Motors', this)">Motors</button>
+    <button class="cat-tab" onclick="setCat('Sensors', this)">Sensors</button>
+    <button class="cat-tab" onclick="setCat('Electronics', this)">Electronics</button>
+    <button class="cat-tab" onclick="setCat('Other', this)">Other</button>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Part Name</th>
+          <th>Category</th>
+          <th>Location</th>
+          <th>Qty</th>
+          <th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="parts-tbody"></tbody>
+    </table>
+    <div class="empty-state" id="empty-state" style="display:none">
+      <div class="empty-icon">📦</div>
+      <p>No parts found. Add your first part!</p>
+    </div>
+  </div>
+</div>
+
+<!-- ─── MODAL ─── -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <h2 id="modal-title">Add New Part</h2>
+    <div class="form-grid">
+      <div class="form-field">
+        <label>Part Name *</label>
+        <input type="text" id="f-name" placeholder="e.g. REV Core Hex Motor">
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>Category *</label>
+          <select id="f-cat">
+            <option value="Hardware">Hardware</option>
+            <option value="Motors">Motors</option>
+            <option value="Sensors">Sensors</option>
+            <option value="Electronics">Electronics</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Quantity *</label>
+          <input type="number" id="f-qty" min="0" value="1">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>Low Stock Threshold</label>
+          <input type="number" id="f-thresh" min="0" value="2">
+        </div>
+        <div class="form-field">
+          <label>Storage Location</label>
+          <input type="text" id="f-loc" placeholder="e.g. Bin A3">
+        </div>
+      </div>
+      <div class="form-field">
+        <label>Notes</label>
+        <textarea id="f-notes" placeholder="Part number, supplier, specs…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="savePart()">Save Part</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+let supabase = null;
+let parts = [];
+let editingId = null;
+let filterMode = 'all';
+let catFilter = 'all';
+
+// ─── SETUP ───
+async function connect() {
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  const err = document.getElementById('setup-error');
+
+  if (!url || !key) { err.style.display = 'block'; err.textContent = 'Both fields are required.'; return; }
+
+  try {
+    supabase = window.supabase.createClient(url, key);
+    const { error } = await supabase.from('parts').select('id').limit(1);
+    if (error) throw error;
+    localStorage.setItem('ftc_sb_url', url);
+    localStorage.setItem('ftc_sb_key', key);
+    launchApp();
+  } catch (e) {
+    err.style.display = 'block';
+    err.textContent = '✗ ' + (e.message || 'Could not connect. Check your credentials and make sure you ran the SQL.');
+  }
+}
+
+function copySQL() {
+  const sql = document.getElementById('sql-text').textContent;
+  navigator.clipboard.writeText(sql);
+  showToast('SQL copied to clipboard!');
+}
+
+// ─── LAUNCH ───
+async function launchApp() {
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  await loadParts();
+  subscribeRealtime();
+}
+
+// ─── DATA ───
+async function loadParts() {
+  const { data, error } = await supabase.from('parts').select('*').order('name');
+  if (error) { showToast('Load error: ' + error.message, true); return; }
+  parts = data || [];
+  renderTable();
+  updateStats();
+}
+
+function subscribeRealtime() {
+  supabase.channel('parts-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'parts' }, () => loadParts())
+    .subscribe();
+}
+
+// ─── RENDER ───
+function renderTable() {
+  const query = document.getElementById('search-input').value.toLowerCase();
+  const tbody = document.getElementById('parts-tbody');
+  const empty = document.getElementById('empty-state');
+
+  let filtered = parts.filter(p => {
+    const matchSearch = !query || p.name.toLowerCase().includes(query) || (p.notes||'').toLowerCase().includes(query) || (p.location||'').toLowerCase().includes(query);
+    const matchCat = catFilter === 'all' || p.category === catFilter;
+    const matchFilter = filterMode === 'all' || p.quantity <= p.low_threshold;
+    return matchSearch && matchCat && matchFilter;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = filtered.map(p => {
+    const isLow = p.quantity > 0 && p.quantity <= p.low_threshold;
+    const isCritical = p.quantity === 0;
+    const qtyClass = isCritical ? 'critical' : isLow ? 'low' : 'ok';
+    const badge = isCritical ? '<span class="critical-badge">OUT</span>' : isLow ? '<span class="low-badge">LOW</span>' : '';
+    const catSlug = p.category.toLowerCase();
+    return `
+      <tr>
+        <td>
+          <div class="part-name">${esc(p.name)}</div>
+          ${p.notes ? `<div class="part-notes">${esc(p.notes)}</div>` : ''}
+        </td>
+        <td><span class="cat-badge cat-${catSlug}">${esc(p.category)}</span></td>
+        <td><span style="font-family:var(--mono);font-size:12px;color:var(--muted)">${esc(p.location||'—')}</span></td>
+        <td>
+          <div class="qty-cell">
+            <div class="qty-val ${qtyClass}">${p.quantity}</div>
+            <div class="qty-btns">
+              <button class="qty-btn" onclick="adjustQty('${p.id}', -1)" title="Decrease">−</button>
+              <button class="qty-btn" onclick="adjustQty('${p.id}', 1)"  title="Increase">+</button>
+            </div>
+            ${badge}
+          </div>
+        </td>
+        <td>
+          <div class="row-actions">
+            <button class="icon-btn edit" onclick="openEdit('${p.id}')" title="Edit">✎</button>
+            <button class="icon-btn del"  onclick="deletePart('${p.id}')" title="Delete">✕</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function updateStats() {
+  const total = parts.length;
+  const qty   = parts.reduce((s, p) => s + p.quantity, 0);
+  const low   = parts.filter(p => p.quantity <= p.low_threshold).length;
+
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-qty').textContent   = qty;
+  document.getElementById('stat-low').textContent   = low;
+
+  // Banner
+  const lowParts = parts.filter(p => p.quantity <= p.low_threshold);
+  const banner = document.getElementById('low-banner');
+  if (lowParts.length > 0) {
+    banner.style.display = 'flex';
+    document.getElementById('low-list').innerHTML = lowParts
+      .map(p => `<span>${esc(p.name)} (${p.quantity})</span>`)
+      .join('<span style="color:var(--border)"> · </span>');
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+// ─── QTY ADJUST ───
+async function adjustQty(id, delta) {
+  const part = parts.find(p => p.id === id);
+  if (!part) return;
+  const newQty = Math.max(0, part.quantity + delta);
+  const { error } = await supabase.from('parts').update({ quantity: newQty }).eq('id', id);
+  if (error) showToast('Error: ' + error.message, true);
+  // Realtime will reload, but also update local for snappiness
+  part.quantity = newQty;
+  renderTable();
+  updateStats();
+}
+
+// ─── MODAL ───
+function openModal() {
+  editingId = null;
+  document.getElementById('modal-title').textContent = 'Add New Part';
+  document.getElementById('f-name').value    = '';
+  document.getElementById('f-cat').value     = 'Hardware';
+  document.getElementById('f-qty').value     = '1';
+  document.getElementById('f-thresh').value  = '2';
+  document.getElementById('f-loc').value     = '';
+  document.getElementById('f-notes').value   = '';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function openEdit(id) {
+  const p = parts.find(x => x.id === id);
+  if (!p) return;
+  editingId = id;
+  document.getElementById('modal-title').textContent = 'Edit Part';
+  document.getElementById('f-name').value    = p.name;
+  document.getElementById('f-cat').value     = p.category;
+  document.getElementById('f-qty').value     = p.quantity;
+  document.getElementById('f-thresh').value  = p.low_threshold;
+  document.getElementById('f-loc').value     = p.location || '';
+  document.getElementById('f-notes').value   = p.notes || '';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModalOutside(e) { if (e.target === document.getElementById('modal-overlay')) closeModal(); }
+
+async function savePart() {
+  const name   = document.getElementById('f-name').value.trim();
+  const cat    = document.getElementById('f-cat').value;
+  const qty    = parseInt(document.getElementById('f-qty').value) || 0;
+  const thresh = parseInt(document.getElementById('f-thresh').value) || 2;
+  const loc    = document.getElementById('f-loc').value.trim();
+  const notes  = document.getElementById('f-notes').value.trim();
+
+  if (!name) { showToast('Part name is required!', true); return; }
+
+  const payload = { name, category: cat, quantity: qty, low_threshold: thresh, location: loc || null, notes: notes || null };
+
+  let error;
+  if (editingId) {
+    ({ error } = await supabase.from('parts').update(payload).eq('id', editingId));
+  } else {
+    ({ error } = await supabase.from('parts').insert(payload));
+  }
+
+  if (error) { showToast('Error: ' + error.message, true); return; }
+  closeModal();
+  showToast(editingId ? 'Part updated!' : 'Part added!');
+}
+
+async function deletePart(id) {
+  if (!confirm('Delete this part from inventory?')) return;
+  const { error } = await supabase.from('parts').delete().eq('id', id);
+  if (error) { showToast('Error: ' + error.message, true); return; }
+  showToast('Part deleted.');
+}
+
+// ─── FILTERS ───
+function setFilter(mode, btn) {
+  filterMode = mode;
+  document.querySelectorAll('[id^="filter-"]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+
+function setCat(cat, btn) {
+  catFilter = cat;
+  document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+
+// ─── TOAST ───
+let toastTimer;
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 2800);
+}
+
+// ─── UTILS ───
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ─── AUTO CONNECT (saved creds) ───
+window.addEventListener('load', () => {
+  const url = localStorage.getItem('ftc_sb_url');
+  const key = localStorage.getItem('ftc_sb_key');
+  if (url && key) {
+    document.getElementById('sb-url').value = url;
+    document.getElementById('sb-key').value = key;
+    supabase = window.supabase.createClient(url, key);
+    supabase.from('parts').select('id').limit(1).then(({ error }) => {
+      if (!error) launchApp();
+    });
+  }
+});
+</script>
+</body>
+</html>
