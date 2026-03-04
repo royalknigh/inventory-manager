@@ -831,7 +831,7 @@ create policy "public write" on parts for all    using (true);</div>
 <div id="toast"></div>
 
 <script>
-let supabase = null;
+let sbClient = null;
 let parts = [];
 let editingId = null;
 let filterMode = 'all';
@@ -846,8 +846,8 @@ async function connect() {
   if (!url || !key) { err.style.display = 'block'; err.textContent = 'Both fields are required.'; return; }
 
   try {
-    supabase = window.supabase.createClient(url, key);
-    const { error } = await supabase.from('parts').select('id').limit(1);
+    sbClient = window.supabase.createClient(url, key);
+    const { error } = await sbClient.from('parts').select('id').limit(1);
     if (error) throw error;
     localStorage.setItem('ftc_sb_url', url);
     localStorage.setItem('ftc_sb_key', key);
@@ -874,7 +874,7 @@ async function launchApp() {
 
 // ─── DATA ───
 async function loadParts() {
-  const { data, error } = await supabase.from('parts').select('*').order('name');
+  const { data, error } = await sbClient.from('parts').select('*').order('name');
   if (error) { showToast('Load error: ' + error.message, true); return; }
   parts = data || [];
   renderTable();
@@ -882,7 +882,7 @@ async function loadParts() {
 }
 
 function subscribeRealtime() {
-  supabase.channel('parts-changes')
+  sbClient.channel('parts-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'parts' }, () => loadParts())
     .subscribe();
 }
@@ -968,7 +968,7 @@ async function adjustQty(id, delta) {
   const part = parts.find(p => p.id === id);
   if (!part) return;
   const newQty = Math.max(0, part.quantity + delta);
-  const { error } = await supabase.from('parts').update({ quantity: newQty }).eq('id', id);
+  const { error } = await sbClient.from('parts').update({ quantity: newQty }).eq('id', id);
   if (error) showToast('Error: ' + error.message, true);
   // Realtime will reload, but also update local for snappiness
   part.quantity = newQty;
@@ -1020,9 +1020,9 @@ async function savePart() {
 
   let error;
   if (editingId) {
-    ({ error } = await supabase.from('parts').update(payload).eq('id', editingId));
+    ({ error } = await sbClient.from('parts').update(payload).eq('id', editingId));
   } else {
-    ({ error } = await supabase.from('parts').insert(payload));
+    ({ error } = await sbClient.from('parts').insert(payload));
   }
 
   if (error) { showToast('Error: ' + error.message, true); return; }
@@ -1032,7 +1032,7 @@ async function savePart() {
 
 async function deletePart(id) {
   if (!confirm('Delete this part from inventory?')) return;
-  const { error } = await supabase.from('parts').delete().eq('id', id);
+  const { error } = await sbClient.from('parts').delete().eq('id', id);
   if (error) { showToast('Error: ' + error.message, true); return; }
   showToast('Part deleted.');
 }
@@ -1072,8 +1072,8 @@ window.addEventListener('load', () => {
   if (url && key) {
     document.getElementById('sb-url').value = url;
     document.getElementById('sb-key').value = key;
-    supabase = window.supabase.createClient(url, key);
-    supabase.from('parts').select('id').limit(1).then(({ error }) => {
+    sbClient = window.supabase.createClient(url, key);
+    sbClient.from('parts').select('id').limit(1).then(({ error }) => {
       if (!error) launchApp();
     });
   }
