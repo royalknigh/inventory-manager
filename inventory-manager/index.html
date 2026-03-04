@@ -674,7 +674,7 @@
   name text not null,
   category text not null,
   quantity int not null default 0,
-  low_threshold int not null default 2,
+  low_threshold int not null default 0,
   location text,
   notes text,
   created_at timestamptz default now()
@@ -1010,7 +1010,7 @@ async function savePart() {
   const name   = document.getElementById('f-name').value.trim();
   const cat    = document.getElementById('f-cat').value;
   const qty    = parseInt(document.getElementById('f-qty').value) || 0;
-  const thresh = parseInt(document.getElementById('f-thresh').value) || 2;
+  const thresh = parseInt(document.getElementById('f-thresh').value) ?? 2;
   const loc    = document.getElementById('f-loc').value.trim();
   const notes  = document.getElementById('f-notes').value.trim();
 
