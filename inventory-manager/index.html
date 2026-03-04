@@ -662,7 +662,7 @@
 <body>
 
 <!-- ─── SETUP SCREEN ─── -->
-<div id="setup-screen">
+<div id="setup-screen" style="display:none">
   <div class="setup-card">
     <h1>⚙️ FTC <span>Inventory</span> Setup</h1>
     <p class="setup-subtitle">// one-time configuration — runs in seconds</p>
@@ -705,6 +705,7 @@ create policy "public write" on parts for all    using (true);</div>
   <div class="header">
     <div class="header-left">
       <h1>FTC <span>Parts</span> Inventory</h1>
+      <div class="team-tag">// shared inventory · updates live for everyone</div>
     </div>
     <div class="header-right">
       <div class="live-dot"></div>
@@ -1064,18 +1065,12 @@ function showToast(msg, isError = false) {
 // ─── UTILS ───
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-// ─── AUTO CONNECT (saved creds) ───
+// ─── AUTO CONNECT (hardcoded creds) ───
 window.addEventListener('load', () => {
-  const url = localStorage.getItem('ftc_sb_url');
-  const key = localStorage.getItem('ftc_sb_key');
-  if (url && key) {
-    document.getElementById('sb-url').value = url;
-    document.getElementById('sb-key').value = key;
-    sbClient = window.supabase.createClient(url, key);
-    sbClient.from('parts').select('id').limit(1).then(({ error }) => {
-      if (!error) launchApp();
-    });
-  }
+  const url = 'https://rqewbtetdcyfejnmmcsn.supabase.co';
+  const key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJxZXdidGV0ZGN5ZmVqbm1tY3NuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NTg0OTUsImV4cCI6MjA4ODEzNDQ5NX0.RtfUPZCCJw_Y-2hP8ATISWi_t9UFRdv0QP0_qLC1UGY';
+  sbClient = window.supabase.createClient(url, key);
+  launchApp();
 });
 </script>
 </body>
